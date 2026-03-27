@@ -8,82 +8,56 @@ on:
 env:
   IMAGE_NAME: ci-html
   IMAGE_TAG: 1.0.1
-  DOCKERHUB_USERNAME: libassehanne
   DOCKER_REGISTRY: libassehanne
 
 jobs:
-  # ==============================
-  # JOB 1 - CI : BUILD + PUSH
-  # ===============================
   ci:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
 
-      - name: Display variables
-        run: |
-          echo "IMAGE_NAME: $IMAGE_NAME"
-          echo "IMAGE_TAG: $IMAGE_TAG"
-          echo "DOCKER_REGISTRY: $DOCKER_REGISTRY"
-
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
-          username: libassehanne
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build Docker image
-        run: |
-          docker build -t $DOCKER_REGISTRY/$IMAGE_NAME:$IMAGE_TAG .
-
-      - name: Verify image
-        run: |
-          docker image ls | grep $IMAGE_NAME
+        run: docker build -t libassehanne/ci-html:1.0.1 .
 
       - name: Push Docker image
-        run: |
-          docker push $DOCKER_REGISTRY/$IMAGE_NAME:$IMAGE_TAG
+        run: docker push libassehanne/ci-html:1.0.1
 
-  # ===============================
-  # JOB 2 - SCAN TRIVY
-  # ===============================
   scan-trivy:
     needs: ci
     runs-on: ubuntu-latest
     steps:
-      - name: Run Trivy vulnerability scanner
+      - name: Scan avec Trivy
         uses: aquasecurity/trivy-action@0.20.0
         with:
-          image-ref: libassehanne/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          image-ref: libassehanne/ci-html:1.0.1
           format: table
           severity: CRITICAL,HIGH
           exit-code: 0
-          vuln-type: os,library
           ignore-unfixed: true
 
-  # ===============================
-  # JOB 3 - CD : DEPLOY
-  # ===============================
   deploy:
     needs: scan-trivy
     runs-on: ubuntu-latest
     steps:
-      - name: Pull latest image
-        run: |
-          docker pull $DOCKER_REGISTRY/$IMAGE_NAME:$IMAGE_TAG
+      - name: Pull image
+        run: docker pull libassehanne/ci-html:1.0.1
 
-      - name: Stop existing container
-        run: |
-          docker stop ci-app || true
+      - name: Stop old container
+        run: docker stop ci-app || true
 
       - name: Remove old container
-        run: |
-          docker rm ci-app || true
+        run: docker rm ci-app || true
 
       - name: Run new container
         run: |
           docker run -d \
             -p 80:80 \
             --name ci-app \
-            $DOCKER_REGISTRY/$IMAGE_NAME:$IMAGE_TAG
+            libassehanne/ci-html:1.0.1
